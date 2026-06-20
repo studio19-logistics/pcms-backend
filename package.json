@@ -1,0 +1,20 @@
+{
+  "name": "pcms-backend",
+  "version": "1.0.0",
+  "description": "Project Collections Management System — backend API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "nodemailer": "^6.10.0",
+    "exceljs": "^4.4.0"
+  }
+}
