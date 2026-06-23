@@ -60,7 +60,7 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/:id', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('projects')
-    .select('*, clients(*), user_profiles(full_name), payment_milestones(*)')
+    .select('*, clients(*), user_profiles(full_name)')
     .eq('id', req.params.id)
     .single();
   if (error) return res.status(500).json({ error: error.message });

@@ -4,7 +4,9 @@ require('dotenv').config();
 
 const clientRoutes = require('./routes/clients');
 const projectRoutes = require('./routes/projects');
+const invoiceRoutes = require('./routes/invoices');
 const milestoneRoutes = require('./routes/milestones');
+const notesRoutes = require('./routes/notes');
 const dashboardRoutes = require('./routes/dashboard');
 
 const app = express();
@@ -36,7 +38,9 @@ app.use((err, req, res, next) => {
 
 app.use('/api/clients', clientRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/invoices', invoiceRoutes);
 app.use('/api/milestones', milestoneRoutes);
+app.use('/api/notes', notesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 app.get('/api/health', (req, res) => {

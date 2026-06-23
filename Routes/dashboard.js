@@ -23,17 +23,31 @@ router.get('/collections', requireAuth, async (req, res) => {
 
   const { data: recentlyCollected, error: rcError } = await supabase
     .from('payment_milestones')
-    .select('*, projects(project_name, clients(company_name))')
+    .select('*, invoices(invoice_number, projects(project_name, clients(company_name)))')
     .eq('status', 'paid')
     .order('actual_payment_date', { ascending: false })
     .limit(10);
   if (rcError) return res.status(500).json({ error: rcError.message });
 
+  // Normalize nested join shape (Supabase can return single-relation
+  // joins as either an object or a one-item array).
+  const normalizedRecent = recentlyCollected.map(m => {
+    const invoice = Array.isArray(m.invoices) ? m.invoices[0] : m.invoices;
+    const project = Array.isArray(invoice?.projects) ? invoice.projects[0] : invoice?.projects;
+    const client = Array.isArray(project?.clients) ? project.clients[0] : project?.clients;
+    return {
+      ...m,
+      invoice_number: invoice?.invoice_number,
+      project_name: project?.project_name,
+      client_name: client?.company_name,
+    };
+  });
+
   res.json({
     due_today: dueToday,
     upcoming,
     overdue,
-    recently_collected: recentlyCollected
+    recently_collected: normalizedRecent
   });
 });
 
