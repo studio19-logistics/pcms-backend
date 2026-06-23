@@ -112,4 +112,52 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
   res.json(data);
 });
 
+// Snooze a milestone — pushes reminders out by a chosen number of days.
+// Snooze overrides ALL scheduling logic until snoozed_until date passes.
+router.patch('/:id/snooze', requireAuth, async (req, res) => {
+  const { days } = req.body;
+  if (!days || typeof days !== 'number' || days < 1 || days > 30) {
+    return res.status(400).json({ error: 'days must be a number between 1 and 30' });
+  }
+
+  const { data: milestone } = await supabase
+    .from('payment_milestones').select('invoice_id').eq('id', req.params.id).single();
+  if (!milestone) return res.status(404).json({ error: 'Milestone not found' });
+
+  const allowed = await canEditInvoice(milestone.invoice_id, req.profile);
+  if (!allowed) return res.status(403).json({ error: 'You can only snooze milestones on your own projects' });
+
+  const snoozedUntil = new Date();
+  snoozedUntil.setDate(snoozedUntil.getDate() + days);
+  const snoozedUntilStr = snoozedUntil.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('payment_milestones')
+    .update({ snoozed_until: snoozedUntilStr })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Clear a snooze manually (if user wants to un-snooze early)
+router.patch('/:id/unsnooze', requireAuth, async (req, res) => {
+  const { data: milestone } = await supabase
+    .from('payment_milestones').select('invoice_id').eq('id', req.params.id).single();
+  if (!milestone) return res.status(404).json({ error: 'Milestone not found' });
+
+  const allowed = await canEditInvoice(milestone.invoice_id, req.profile);
+  if (!allowed) return res.status(403).json({ error: 'You can only unsnooze milestones on your own projects' });
+
+  const { data, error } = await supabase
+    .from('payment_milestones')
+    .update({ snoozed_until: null })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 module.exports = router;
