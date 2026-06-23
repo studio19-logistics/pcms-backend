@@ -2,15 +2,17 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const clientRoutes = require('./routes/clients');
-const projectRoutes = require('./routes/projects');
-const invoiceRoutes = require('./routes/invoices');
-const milestoneRoutes = require('./routes/milestones');
-const notesRoutes = require('./routes/notes');
-const dashboardRoutes = require('./routes/dashboard');
+const clientRoutes = require('./Routes/clients');
+const projectRoutes = require('./Routes/projects');
+const invoiceRoutes = require('./Routes/invoices');
+const milestoneRoutes = require('./Routes/milestones');
+const notesRoutes = require('./Routes/notes');
+const dashboardRoutes = require('./Routes/dashboard');
 
+const remindersRoutes = require('./Routes/reminders');
 const app = express();
 const PORT = process.env.PORT || 3001;
+
 
 app.use(cors());
 
@@ -42,6 +44,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/milestones', milestoneRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/reminders', remindersRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'PCMS backend is running' });
