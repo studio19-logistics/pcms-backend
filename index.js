@@ -9,7 +9,7 @@ const milestoneRoutes = require('./Routes/milestones');
 const notesRoutes = require('./Routes/notes');
 const dashboardRoutes = require('./Routes/dashboard');
 
-const remindersRoutes = require('./Routes/reminders');
+const remindersRoutes = require('./Routes/reminder');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
