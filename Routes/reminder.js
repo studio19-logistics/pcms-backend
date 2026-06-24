@@ -21,7 +21,7 @@ router.post('/send', async (req, res) => {
       : to.split(',').map(email => email.trim())
 
     const { data, error } = await resend.emails.send({
-      from: 'Studio19 PCMS <noreply@studio19offices.in>',
+      from: 'Studio19 PCMS <noreply@studio19offices.com>',
       to: recipients,
       subject,
       html,
