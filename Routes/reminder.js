@@ -1,8 +1,11 @@
 const express = require('express')
 const router = express.Router()
-const { Resend } = require('resend')
+const Brevo = require('@getbrevo/brevo')
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const client = Brevo.ApiClient.instance
+client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY
+
+const transactionalApi = new Brevo.TransactionalEmailsApi()
 
 router.post('/send', async (req, res) => {
   const { to, subject, html } = req.body
@@ -10,18 +13,18 @@ router.post('/send', async (req, res) => {
   if (!to || !subject || !html) {
     return res.status(400).json({ error: 'Missing to, subject, or html' })
   }
+
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Studio19 PCMS <onboarding@resend.dev>',
-      to,
-      subject,
-      html,
-    })
-    if (error) {
-      console.log('Resend error:', error.message)
-      return res.status(500).json({ error: error.message })
-    }
-    console.log('Email sent successfully:', data)
+    const recipients = to.split(',').map(email => ({ email: email.trim() }))
+
+    const email = new Brevo.SendSmtpEmail()
+    email.sender = { name: 'Studio19 PCMS', email: 'studio19.logistics@gmail.com' }
+    email.to = recipients
+    email.subject = subject
+    email.htmlContent = html
+
+    await transactionalApi.sendTransacEmail(email)
+    console.log('Email sent successfully to:', to)
     res.json({ success: true })
   } catch (err) {
     console.log('Email error:', err.message)
