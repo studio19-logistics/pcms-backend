@@ -12,7 +12,13 @@ router.post('/send', async (req, res) => {
   }
 
   try {
-    const recipients = to.split(',').map(email => email.trim())
+    // The edge function now sends `to` as an array already split and
+    // trimmed. Still handle a plain comma-separated string too, in
+    // case this route ever gets called from somewhere else that
+    // hasn't been updated to send an array.
+    const recipients = Array.isArray(to)
+      ? to
+      : to.split(',').map(email => email.trim())
 
     const { data, error } = await resend.emails.send({
       from: 'Studio19 PCMS <noreply@studio19offices.in>',
