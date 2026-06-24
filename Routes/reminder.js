@@ -1,8 +1,8 @@
 const express = require('express')
 const router = express.Router()
-const { TransactionalEmailsApi, SendSmtpEmail } = require('@getbrevo/brevo')
+const brevo = require('@getbrevo/brevo')
 
-const apiInstance = new TransactionalEmailsApi()
+const apiInstance = new brevo.TransactionalEmailsApi()
 apiInstance.authentications['api-key'].apiKey = process.env.BREVO_API_KEY
 
 router.post('/send', async (req, res) => {
@@ -15,7 +15,7 @@ router.post('/send', async (req, res) => {
   try {
     const recipients = to.split(',').map(email => ({ email: email.trim() }))
 
-    const email = new SendSmtpEmail()
+    const email = new brevo.SendSmtpEmail()
     email.sender = { name: 'Studio19 PCMS', email: 'studio19.logistics@gmail.com' }
     email.to = recipients
     email.subject = subject
