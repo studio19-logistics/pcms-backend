@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const { requireAuth } = require('../middleware/auth');
-const { logActivity } = require('../services/activityLogger');
+const { logActivity } = require('../services/activitylogger');
 
 function normalizeAuthor(row) {
   return { ...row, user_profiles: Array.isArray(row.user_profiles) ? row.user_profiles[0] : row.user_profiles };

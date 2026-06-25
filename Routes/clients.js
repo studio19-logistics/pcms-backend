@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { logActivity } = require('../services/activityLogger');
+const { logActivity } = require('../services/activitylogger');
 
 router.get('/', requireAuth, async (req, res) => {
   const { data, error } = await supabase.from('clients').select('*, client_contacts(*)').order('created_at', { ascending: false });

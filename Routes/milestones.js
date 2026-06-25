@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/supabase');
 const { requireAuth } = require('../middleware/auth');
-const { logActivity } = require('../services/activityLogger');
+const { logActivity } = require('../services/activitylogger');
 
 async function canEditInvoice(invoiceId, profile) {
   if (profile.role === 'admin') return true;
