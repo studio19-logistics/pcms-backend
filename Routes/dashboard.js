@@ -1,176 +1,82 @@
-import { useAuth } from '../AuthContext'
-import { useEffect, useState } from 'react'
-import * as api from '../api'
+const express = require('express');
+const router = express.Router();
+const supabase = require('../services/supabase');
+const { requireAuth } = require('../middleware/auth');
 
-const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'collections', label: 'Collections' },
-  { id: 'clients', label: 'Clients' },
-  { id: 'projects', label: 'Projects' },
-]
+router.get('/collections', requireAuth, async (req, res) => {
+  const { data: rows, error } = await supabase
+    .from('payment_milestones_live')
+    .select('*')
+    .neq('status', 'paid');
+  if (error) return res.status(500).json({ error: error.message });
 
-function timeAgo(dateStr) {
-  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return `${Math.floor(diff / 86400)}d ago`
-}
+  const dueToday = rows.filter(r => r.live_status === 'due_today');
+  const upcoming = rows.filter(r => r.live_status === 'upcoming')
+    .sort((a, b) => new Date(a.expected_date) - new Date(b.expected_date));
+  const overdue = rows.filter(r => r.live_status === 'overdue')
+    .sort((a, b) => b.amount - a.amount);
 
-function formatAction(action, entityName) {
-  const labels = {
-    project_created: `Project created`,
-    project_updated: `Project updated`,
-    project_deleted: `Project deleted`,
-    project_reassigned: `Project reassigned`,
-    invoice_created: `Invoice added`,
-    invoice_updated: `Invoice updated`,
-    invoice_deleted: `Invoice deleted`,
-    milestones_updated: `Milestones updated`,
-    milestone_marked_paid: `Milestone marked paid`,
-    milestone_marked_pending: `Milestone marked pending`,
-    milestone_snoozed: `Milestone snoozed`,
-    milestone_unsnoozed: `Milestone unsnoozed`,
-    client_created: `Client added`,
-    client_updated: `Client updated`,
-    client_deleted: `Client deleted`,
-    contact_added: `Contact added`,
-    contact_deleted: `Contact deleted`,
-    project_note_added: `Note added`,
-    invoice_note_added: `Note added`,
-    project_note_deleted: `Note deleted`,
-    invoice_note_deleted: `Note deleted`,
-  }
-  return `${labels[action] || action}${entityName ? ` — ${entityName}` : ''}`
-}
+  const { data: recentlyCollected, error: rcError } = await supabase
+    .from('payment_milestones')
+    .select('*, invoices(invoice_number, projects(project_name, clients(company_name)))')
+    .eq('status', 'paid')
+    .order('actual_payment_date', { ascending: false })
+    .limit(10);
+  if (rcError) return res.status(500).json({ error: rcError.message });
 
-function initials(name) {
-  if (!name) return '?'
-  return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
-}
+  const normalizedRecent = recentlyCollected.map(m => {
+    const invoice = Array.isArray(m.invoices) ? m.invoices[0] : m.invoices;
+    const project = Array.isArray(invoice?.projects) ? invoice.projects[0] : invoice?.projects;
+    const client = Array.isArray(project?.clients) ? project.clients[0] : project?.clients;
+    return {
+      ...m,
+      invoice_number: invoice?.invoice_number,
+      project_name: project?.project_name,
+      client_name: client?.company_name,
+    };
+  });
 
-export default function NavBar({ active, onNavigate }) {
-  const { profile, logout } = useAuth()
-  const [open, setOpen] = useState(false)
-  const [activities, setActivities] = useState([])
-  const [unread, setUnread] = useState(0)
-  const [loading, setLoading] = useState(false)
+  res.json({ due_today: dueToday, upcoming, overdue, recently_collected: normalizedRecent });
+});
 
-  const STORAGE_KEY = 'pcms_last_read'
+router.get('/kpis', requireAuth, async (req, res) => {
+  const { data: projects, error: projError } = await supabase
+    .from('projects').select('status, project_value');
+  if (projError) return res.status(500).json({ error: projError.message });
 
-  useEffect(() => {
-    fetchActivity()
-    const interval = setInterval(fetchActivity, 60000) // refresh every 60s
-    return () => clearInterval(interval)
-  }, [])
+  const { data: milestones, error: msError } = await supabase
+    .from('payment_milestones_live').select('amount, status, live_status');
+  if (msError) return res.status(500).json({ error: msError.message });
 
-  async function fetchActivity() {
-    setLoading(true)
-    const result = await api.getActivity()
-    if (!result.error) {
-      setActivities(result)
-      const lastRead = localStorage.getItem(STORAGE_KEY)
-      if (lastRead) {
-        const count = result.filter(a => new Date(a.created_at) > new Date(lastRead)).length
-        setUnread(count)
-      } else {
-        setUnread(result.length)
-      }
-    }
-    setLoading(false)
-  }
+  const totalProjects = projects.length;
+  const activeProjects = projects.filter(p => p.status === 'active').length;
+  const totalValue = projects.reduce((sum, p) => sum + Number(p.project_value), 0);
+  const received = milestones.filter(m => m.status === 'paid').reduce((sum, m) => sum + Number(m.amount), 0);
+  const outstanding = milestones.filter(m => m.status !== 'paid').reduce((sum, m) => sum + Number(m.amount), 0);
+  const overdueAmount = milestones.filter(m => m.live_status === 'overdue').reduce((sum, m) => sum + Number(m.amount), 0);
 
-  function openSidebar() {
-    setOpen(true)
-    const now = new Date().toISOString()
-    localStorage.setItem(STORAGE_KEY, now)
-    setUnread(0)
-  }
+  res.json({
+    total_projects: totalProjects,
+    active_projects: activeProjects,
+    total_project_value: totalValue,
+    amount_received: received,
+    outstanding_amount: outstanding,
+    overdue_amount: overdueAmount,
+    payments_due_today: milestones.filter(m => m.live_status === 'due_today').length,
+    payments_overdue: milestones.filter(m => m.live_status === 'overdue').length,
+    payments_due_this_week: milestones.filter(m => m.live_status === 'upcoming').length,
+  });
+});
 
-  return (
-    <>
-      <header className="bg-surface bg-texture border-b border-surface-border sticky top-0 z-20">
-        <div className="px-6 pt-5 pb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-brand-500 text-surface flex items-center justify-center text-sm font-medium flex-shrink-0">
-              {initials(profile?.full_name)}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-ink">{profile?.full_name}</p>
-              <p className="text-xs text-ink-dim capitalize">{profile?.role}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Bell icon */}
-            <button
-              onClick={openSidebar}
-              className="relative p-2 rounded-pill hover:bg-surface-raised transition"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-ink-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {unread > 0 && (
-                <span className="absolute top-1 right-1 bg-red-400 text-surface text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={logout}
-              className="text-xs text-ink-dim hover:text-ink border border-surface-border rounded-pill px-3 py-1.5 transition"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-        <nav className="px-6 pb-4 flex gap-1.5 overflow-x-auto">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => onNavigate(tab.id)}
-              className={`text-sm font-medium px-4 py-2 rounded-pill whitespace-nowrap transition ${
-                active === tab.id
-                  ? 'bg-ink text-surface'
-                  : 'text-ink-dim hover:text-ink bg-surface-raised/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </header>
+router.get('/activity', requireAuth, async (req, res) => {
+  const limit = parseInt(req.query.limit) || 50
+  const { data, error } = await supabase
+    .from('activity_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) return res.status(500).json({ error: error.message })
+  res.json(data)
+})
 
-      {/* Overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/40 z-40"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      {/* Activity sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-80 bg-surface-card border-l border-surface-border z-50 flex flex-col transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="px-4 py-4 border-b border-surface-border flex items-center justify-between">
-          <h2 className="font-serif text-lg text-ink">Activity</h2>
-          <button onClick={() => setOpen(false)} className="text-ink-faint hover:text-ink text-lg leading-none">✕</button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {loading && activities.length === 0 && (
-            <p className="text-xs text-ink-faint px-4 py-6 text-center">Loading...</p>
-          )}
-          {!loading && activities.length === 0 && (
-            <p className="text-xs text-ink-faint px-4 py-6 text-center">No activity yet.</p>
-          )}
-          {activities.map(a => (
-            <div key={a.id} className="px-4 py-3 border-b border-surface-border hover:bg-surface-raised/50 transition">
-              <p className="text-xs text-ink">{formatAction(a.action, a.entity_name)}</p>
-              <p className="text-[11px] text-ink-faint mt-0.5">
-                {a.performed_by_name || 'System'} · {timeAgo(a.created_at)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )
-}
+module.exports = router;
