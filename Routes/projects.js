@@ -52,14 +52,30 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 router.post('/', requireAuth, async (req, res) => {
-  const body = cleanPayload(req.body, ['project_name', 'project_value']);
-  const { project_name, architect_id, owner_id, project_value, po_number, po_date, status } = body;
+  const body = cleanPayload(req.body, ['project_name', 'project_value', 'architect_name', 'architect_pocs']);
+  const { project_name, architect_name, architect_pocs, owner_id, project_value, po_number, po_date } = body;
   if (!project_name || !project_value) {
     return res.status(400).json({ error: 'project_name and project_value are required' });
   }
+
+  let architect_id = null;
+  if (architect_name && architect_name.trim()) {
+    const { data: architect, error: architectError } = await supabase
+      .from('architects').insert([{ company_name: architect_name.trim(), created_by: req.profile.id }]).select().single();
+    if (architectError) return res.status(500).json({ error: architectError.message });
+    architect_id = architect.id;
+    if (Array.isArray(architect_pocs) && architect_pocs.length > 0) {
+      const pocRows = architect_pocs.filter(p => p.poc_name && p.poc_name.trim()).map(p => ({ ...p, architect_id }));
+      if (pocRows.length > 0) {
+        const { error: pocError } = await supabase.from('architect_pocs').insert(pocRows);
+        if (pocError) return res.status(500).json({ error: pocError.message });
+      }
+    }
+  }
+
   const { data, error } = await supabase.from('projects').insert([{
     project_name, architect_id, owner_id: owner_id || null,
-    project_value, po_number, po_date, status: status || 'active'
+    project_value, po_number, po_date, status: 'active'
   }]).select().single();
   if (error) return res.status(500).json({ error: error.message });
   await logActivity('project_created', 'project', data.id, project_name, null, 'System');
@@ -67,11 +83,35 @@ router.post('/', requireAuth, async (req, res) => {
 });
 
 router.put('/:id', requireAuth, async (req, res) => {
-  const { data: existing } = await supabase.from('projects').select('project_name').eq('id', req.params.id).single();
+  const { data: existing } = await supabase.from('projects').select('project_name, architect_id').eq('id', req.params.id).single();
   if (!existing) return res.status(404).json({ error: 'Project not found' });
 
-  const body = cleanPayload(req.body, ['project_name', 'project_value']);
-  const { project_name, architect_id, po_number, po_date, project_value, status, owner_id } = body;
+  const body = cleanPayload(req.body, ['project_name', 'project_value', 'architect_name']);
+  const { project_name, architect_name, po_number, po_date, project_value, owner_id } = body;
+
+  if (architect_name && architect_name.trim() && existing.architect_id) {
+    const { error: architectError } = await supabase
+      .from('architects').update({ company_name: architect_name.trim() }).eq('id', existing.architect_id);
+    if (architectError) return res.status(500).json({ error: architectError.message });
+  } else if (architect_name && architect_name.trim() && !existing.architect_id) {
+    const { data: architect, error: architectError } = await supabase
+      .from('architects').insert([{ company_name: architect_name.trim(), created_by: req.profile.id }]).select().single();
+    if (architectError) return res.status(500).json({ error: architectError.message });
+    await supabase.from('projects').update({ architect_id: architect.id }).eq('id', req.params.id);
+  }
+
+  const updates = { project_name, po_number, po_date, project_value, owner_id };
+  const { data, error } = await supabase.from('projects').update(updates).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  await logActivity('project_updated', 'project', data.id, project_name || existing.project_name, null, 'System');
+  res.json(data);
+});
+
+router.patch('/:id/status', requireAuth, async (req, res) => {
+  const { status } = req.body;
+  if (!['active', 'completed'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const { data: existing } = await supabase.from('projects').select('project_name').eq('id', req.params.id).single();
+  if (!existing) return res.status(404).json({ error: 'Project not found' });
 
   if (status === 'completed') {
     const { data: milestones } = await supabase.from('payment_milestones').select('id, status').eq('project_id', req.params.id)
@@ -81,10 +121,9 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
   }
 
-  const updates = { project_name, architect_id, po_number, po_date, project_value, status, owner_id };
-  const { data, error } = await supabase.from('projects').update(updates).eq('id', req.params.id).select().single();
+  const { data, error } = await supabase.from('projects').update({ status }).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
-  await logActivity('project_updated', 'project', data.id, project_name || existing.project_name, null, 'System', { status });
+  await logActivity('project_status_changed', 'project', data.id, existing.project_name, null, 'System', { status });
   res.json(data);
 });
 
