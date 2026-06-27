@@ -20,6 +20,20 @@ router.put('/project/:projectId', requireAuth, async (req, res) => {
   const { data: project } = await supabase.from('projects').select('project_value, project_name').eq('id', req.params.projectId).single();
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
+  // Immutability guard: once any invoice exists against this project's
+  // milestones, the structure can no longer be wiped and rebuilt — doing so
+  // would orphan those invoices (their milestone_id would dangle).
+  const { data: existingMilestones } = await supabase.from('payment_milestones').select('id').eq('project_id', req.params.projectId);
+  const existingIds = (existingMilestones || []).map(m => m.id);
+  if (existingIds.length > 0) {
+    const { count, error: countError } = await supabase
+      .from('invoices').select('id', { count: 'exact', head: true }).in('milestone_id', existingIds);
+    if (countError) return res.status(500).json({ error: countError.message });
+    if (count > 0) {
+      return res.status(400).json({ error: 'Payment terms cannot be modified after invoices have been created. Please complete the existing workflow or create a new project if the payment structure has fundamentally changed.' });
+    }
+  }
+
   const { error: deleteError } = await supabase.from('payment_milestones').delete().eq('project_id', req.params.projectId);
   if (deleteError) return res.status(500).json({ error: deleteError.message });
 
