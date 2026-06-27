@@ -18,21 +18,19 @@ router.get('/collections', requireAuth, async (req, res) => {
 
   const { data: recentlyCollected, error: rcError } = await supabase
     .from('payment_milestones')
-    .select('*, invoices(invoice_number, projects(project_name, clients(company_name)))')
+    .select('*, projects(project_name, architects(company_name))')
     .eq('status', 'paid')
     .order('actual_payment_date', { ascending: false })
     .limit(10);
   if (rcError) return res.status(500).json({ error: rcError.message });
 
   const normalizedRecent = recentlyCollected.map(m => {
-    const invoice = Array.isArray(m.invoices) ? m.invoices[0] : m.invoices;
-    const project = Array.isArray(invoice?.projects) ? invoice.projects[0] : invoice?.projects;
-    const client = Array.isArray(project?.clients) ? project.clients[0] : project?.clients;
+    const project = Array.isArray(m.projects) ? m.projects[0] : m.projects;
+    const architect = Array.isArray(project?.architects) ? project.architects[0] : project?.architects;
     return {
       ...m,
-      invoice_number: invoice?.invoice_number,
       project_name: project?.project_name,
-      client_name: client?.company_name,
+      architect_name: architect?.company_name,
     };
   });
 
@@ -66,6 +64,44 @@ router.get('/kpis', requireAuth, async (req, res) => {
     payments_overdue: milestones.filter(m => m.live_status === 'overdue').length,
     payments_due_this_week: milestones.filter(m => m.live_status === 'upcoming').length,
   });
+});
+
+// People-wise analytics: per team_member owner, project + collection stats
+router.get('/people', requireAuth, async (req, res) => {
+  const { data: owners, error: ownerError } = await supabase.from('team_members').select('id, name, email').order('name');
+  if (ownerError) return res.status(500).json({ error: ownerError.message });
+
+  const { data: projects, error: projError } = await supabase
+    .from('projects').select('id, owner_id, status, project_value');
+  if (projError) return res.status(500).json({ error: projError.message });
+
+  const { data: milestones, error: msError } = await supabase
+    .from('payment_milestones_live').select('amount, status, owner_id');
+  if (msError) return res.status(500).json({ error: msError.message });
+
+  const result = owners.map(owner => {
+    const ownerProjects = projects.filter(p => p.owner_id === owner.id);
+    const ownerMilestones = milestones.filter(m => m.owner_id === owner.id);
+    const totalValue = ownerProjects.reduce((sum, p) => sum + Number(p.project_value), 0);
+    const received = ownerMilestones.filter(m => m.status === 'paid').reduce((sum, m) => sum + Number(m.amount), 0);
+    const outstanding = ownerMilestones.filter(m => m.status !== 'paid').reduce((sum, m) => sum + Number(m.amount), 0);
+    const collectionPct = totalValue > 0 ? Math.round((received / totalValue) * 10000) / 100 : 0;
+
+    return {
+      owner_id: owner.id,
+      owner_name: owner.name,
+      owner_email: owner.email,
+      total_projects: ownerProjects.length,
+      active_projects: ownerProjects.filter(p => p.status === 'active').length,
+      completed_projects: ownerProjects.filter(p => p.status === 'completed').length,
+      total_project_value: totalValue,
+      amount_received: received,
+      outstanding_amount: outstanding,
+      collection_percentage: collectionPct,
+    };
+  });
+
+  res.json(result);
 });
 
 router.get('/activity', requireAuth, async (req, res) => {

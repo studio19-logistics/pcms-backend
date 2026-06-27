@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const clientRoutes = require('./Routes/clients');
+const architectRoutes = require('./Routes/architects');
 const projectRoutes = require('./Routes/projects');
 const invoiceRoutes = require('./Routes/invoices');
 const milestoneRoutes = require('./Routes/milestones');
@@ -38,7 +38,7 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-app.use('/api/clients', clientRoutes);
+app.use('/api/architects', architectRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/milestones', milestoneRoutes);
