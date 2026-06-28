@@ -57,6 +57,9 @@ router.post('/', requireAuth, async (req, res) => {
   if (!project_name || !project_value) {
     return res.status(400).json({ error: 'project_name and project_value are required' });
   }
+  if (!owner_id) return res.status(400).json({ error: 'owner_id is required' });
+  if (!po_number) return res.status(400).json({ error: 'po_number is required' });
+  if (!po_date) return res.status(400).json({ error: 'po_date is required' });
 
   let architect_id = null;
   if (architect_name && architect_name.trim()) {
@@ -88,6 +91,10 @@ router.put('/:id', requireAuth, async (req, res) => {
 
   const body = cleanPayload(req.body, ['project_name', 'project_value', 'architect_name']);
   const { project_name, architect_name, po_number, po_date, project_value, owner_id } = body;
+  if (!project_name || !project_value) return res.status(400).json({ error: 'project_name and project_value are required' });
+  if (!owner_id) return res.status(400).json({ error: 'owner_id is required' });
+  if (!po_number) return res.status(400).json({ error: 'po_number is required' });
+  if (!po_date) return res.status(400).json({ error: 'po_date is required' });
 
   if (architect_name && architect_name.trim() && existing.architect_id) {
     const { error: architectError } = await supabase
