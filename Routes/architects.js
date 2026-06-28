@@ -19,7 +19,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   const { company_name, gst_number, company_address, industry, website, pocs } = req.body;
   if (!company_name) return res.status(400).json({ error: 'Company name is required' });
-  const { data: architect, error } = await supabase.from('architects').insert([{ company_name, gst_number, company_address, industry, website, created_by: req.profile.id }]).select().single();
+  const { data: architect, error } = await supabase.from('architects').insert([{ company_name, gst_number, company_address, industry, website }]).select().single();
   if (error) return res.status(500).json({ error: error.message });
   if (Array.isArray(pocs) && pocs.length > 0) {
     const pocRows = pocs.map(p => ({ ...p, architect_id: architect.id }));

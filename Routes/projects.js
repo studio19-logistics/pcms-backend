@@ -61,7 +61,7 @@ router.post('/', requireAuth, async (req, res) => {
   let architect_id = null;
   if (architect_name && architect_name.trim()) {
     const { data: architect, error: architectError } = await supabase
-      .from('architects').insert([{ company_name: architect_name.trim(), created_by: req.profile.id }]).select().single();
+      .from('architects').insert([{ company_name: architect_name.trim() }]).select().single();
     if (architectError) return res.status(500).json({ error: architectError.message });
     architect_id = architect.id;
     if (Array.isArray(architect_pocs) && architect_pocs.length > 0) {
@@ -95,7 +95,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (architectError) return res.status(500).json({ error: architectError.message });
   } else if (architect_name && architect_name.trim() && !existing.architect_id) {
     const { data: architect, error: architectError } = await supabase
-      .from('architects').insert([{ company_name: architect_name.trim(), created_by: req.profile.id }]).select().single();
+      .from('architects').insert([{ company_name: architect_name.trim() }]).select().single();
     if (architectError) return res.status(500).json({ error: architectError.message });
     await supabase.from('projects').update({ architect_id: architect.id }).eq('id', req.params.id);
   }

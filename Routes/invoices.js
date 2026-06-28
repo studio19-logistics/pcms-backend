@@ -23,7 +23,7 @@ router.post('/milestone/:milestoneId', requireAuth, async (req, res) => {
   if (!milestone) return res.status(404).json({ error: 'Milestone not found' });
   const { data, error } = await supabase.from('invoices').insert([{
     milestone_id: req.params.milestoneId, invoice_number, invoice_date: clean(invoice_date),
-    invoice_value, due_date: clean(due_date), payment_status: 'Pending', created_by: req.profile.id
+    invoice_value, due_date: clean(due_date), payment_status: 'Pending'
   }]).select().single();
   if (error) return res.status(500).json({ error: error.message });
   await logActivity('invoice_created', 'invoice', data.id, invoice_number, req.profile.id, req.profile.full_name, { milestone_id: req.params.milestoneId, invoice_value });

@@ -17,7 +17,7 @@ router.get('/project/:projectId', requireAuth, async (req, res) => {
 router.post('/project/:projectId', requireAuth, async (req, res) => {
   const { note } = req.body;
   if (!note || !note.trim()) return res.status(400).json({ error: 'Note text is required' });
-  const { data, error } = await supabase.from('project_notes').insert([{ project_id: req.params.projectId, author_id: req.profile.id, note: note.trim() }]).select('*, user_profiles(full_name)').single();
+  const { data, error } = await supabase.from('project_notes').insert([{ project_id: req.params.projectId, note: note.trim() }]).select('*, user_profiles(full_name)').single();
   if (error) return res.status(500).json({ error: error.message });
   await logActivity('project_note_added', 'project', req.params.projectId, note.trim().slice(0, 50), req.profile.id, req.profile.full_name);
   res.json(normalizeAuthor(data));
